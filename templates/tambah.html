@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if edit_id else 'Tambah' }} Data Mahasiswa{% endblock %}
+
+{% block extra_style %}
+.form-wrap {
+  max-width: 560px; margin: 0 auto;
+}
+.form-header {
+  margin-bottom: 24px;
+}
+.form-header h1 { font-size: 18px; font-weight: 600; }
+.form-header p  { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+.form-group { margin-bottom: 18px; }
+.form-label {
+  display: block; font-size: 11px; font-weight: 600;
+  color: var(--muted); margin-bottom: 6px;
+  letter-spacing: .05em; text-transform: uppercase;
+}
+.form-label span { color: #A32D2D; margin-left: 2px; }
+
+.input-wrap { position: relative; }
+.input-wrap > i {
+  position: absolute; left: 11px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px; color: var(--hint); pointer-events: none;
+}
+.form-input {
+  width: 100%; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 9px 12px 9px 36px; font-size: 14px;
+  color: var(--text); font-family: inherit; outline: none;
+  transition: border-color .15s;
+}
+.form-input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(24,95,165,.08);
+}
+.form-input.error { border-color: #fca5a5; background: #fef2f2; }
+.form-input:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+
+.form-select {
+  width: 100%; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 9px 36px 9px 36px; font-size: 14px;
+  color: var(--text); font-family: inherit; outline: none;
+  appearance: none; cursor: pointer;
+  transition: border-color .15s;
+}
+.form-select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(24,95,165,.08);
+}
+.select-wrap { position: relative; }
+.select-wrap > i:first-child {
+  position: absolute; left: 11px; top: 50%;
+  transform: translateY(-50%); font-size: 16px;
+  color: var(--hint); pointer-events: none; z-index: 1;
+}
+.select-wrap > i:last-child {
+  position: absolute; right: 11px; top: 50%;
+  transform: translateY(-50%); font-size: 16px;
+  color: var(--hint); pointer-events: none;
+}
+
+.form-hint { font-size: 11px; color: var(--hint); margin-top: 5px; }
+.form-hint.error-hint { color: var(--red); }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* Error box */
+.error-box {
+  background: var(--red-bg); border: 1px solid var(--red-bd);
+  border-radius: var(--radius); padding: 12px 14px;
+  font-size: 13px; color: var(--red); margin-bottom: 20px;
+}
+.error-box ul { padding-left: 18px; margin-top: 6px; }
+.error-box li { margin-top: 4px; }
+.error-box-title {
+  display: flex; align-items: center; gap: 7px;
+  font-weight: 600; margin-bottom: 2px;
+}
+
+/* NIM badge */
+.nim-badge {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 9px 12px 9px 36px;
+  font-family: "SF Mono","Fira Code",monospace;
+  font-size: 14px; color: var(--muted); display: block;
+}
+
+/* Submit row */
+.form-actions { display: flex; gap: 10px; margin-top: 24px; }
+.form-actions .btn { flex: 1; justify-content: center; }
+{% endblock %}
+
+{% block content %}
+<div class="page">
+  <div class="form-wrap">
+
+    <!-- Back -->
+    <a href="{{ url_for('index') }}" class="btn btn-ghost btn-sm" style="margin-bottom:20px">
+      <i class="ti ti-arrow-left"></i> Kembali ke dashboard
+    </a>
+
+    <div class="card">
+      <div class="form-header">
+        <h1>
+          <i class="ti ti-{{ 'edit' if edit_id else 'user-plus' }}"
+             style="color:var(--blue);vertical-align:-2px;margin-right:6px"></i>
+          {{ 'Edit Data' if edit_id else 'Tambah Entri' }} Mahasiswa
+        </h1>
+        <p>
+          {% if edit_id %}
+            Perbarui data mahasiswa di bawah.
+          {% else %}
+            Isi semua kolom untuk menambah data ke database.
+          {% endif %}
+        </p>
+      </div>
+
+      {% if errors %}
+        <div class="error-box">
+          <div class="error-box-title">
+            <i class="ti ti-alert-triangle"></i>
+            {{ errors | length }} kesalahan ditemukan
+          </div>
+          <ul>
+            {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <form method="POST"
+            action="{{ url_for('edit', id=edit_id) if edit_id else url_for('tambah') }}">
+
+        <!-- NIM -->
+        <div class="form-group">
+          <label class="form-label" for="nim">
+            Nomor Induk Mahasiswa (NIM) <span>*</span>
+          </label>
+          {% if edit_id %}
+            <div class="input-wrap">
+              <i class="ti ti-id-badge"></i>
+              <span class="nim-badge">{{ nim }}</span>
+            </div>
+            <input type="hidden" name="nim" value="{{ nim }}">
+            <p class="form-hint">NIM tidak dapat diubah setelah tersimpan.</p>
+          {% else %}
+            <div class="input-wrap">
+              <i class="ti ti-id-badge"></i>
+              <input class="form-input {{ 'error' if errors else '' }}"
+                     type="text" id="nim" name="nim"
+                     value="{{ nim or '' }}"
+                     placeholder="Contoh: 101123456001"
+                     maxlength="12" inputmode="numeric">
+            </div>
+            <p class="form-hint">Wajib tepat 12 digit angka.</p>
+          {% endif %}
+        </div>
+
+        <!-- Nama -->
+        <div class="form-group">
+          <label class="form-label" for="nama">Nama lengkap <span>*</span></label>
+          <div class="input-wrap">
+            <i class="ti ti-user"></i>
+            <input class="form-input" type="text" id="nama" name="nama"
+                   value="{{ nama or '' }}" placeholder="Ketik nama lengkap…" required>
+          </div>
+        </div>
+
+        <!-- Email -->
+        <div class="form-group">
+          <label class="form-label" for="email">Email <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(opsional)</span></label>
+          <div class="input-wrap">
+            <i class="ti ti-mail"></i>
+            <input class="form-input" type="email" id="email" name="email"
+                   value="{{ email or '' }}" placeholder="contoh@student.ac.id"
+                   autocomplete="email">
+          </div>
+          <p class="form-hint">Format: nama@domain.com — boleh dikosongkan.</p>
+        </div>
+
+        <!-- Jurusan -->
+        <div class="form-group">
+          <label class="form-label" for="jurusan">Jurusan / Program studi <span>*</span></label>
+          <div class="input-wrap">
+            <i class="ti ti-building-community"></i>
+            <input class="form-input" type="text" id="jurusan" name="jurusan"
+                   value="{{ jurusan or '' }}"
+                   placeholder="Contoh: Informatika, Sistem Informasi…" required>
+          </div>
+        </div>
+
+        <!-- IPK + Status (row) -->
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label" for="ipk">Indeks Prestasi (IPK) <span>*</span></label>
+            <div class="input-wrap">
+              <i class="ti ti-chart-bar"></i>
+              <input class="form-input" type="number" id="ipk" name="ipk"
+                     value="{{ ipk or '' }}" placeholder="0.00 – 4.00"
+                     step="0.01" min="0" max="4" required>
+            </div>
+            <p class="form-hint">Rentang 0.00 hingga 4.00</p>
+          </div>
+
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label" for="status">Status mahasiswa</label>
+            <div class="select-wrap">
+              <i class="ti ti-toggle-left"></i>
+              <select class="form-select" id="status" name="status">
+                {% for opt in ["Aktif", "Cuti", "Keluar"] %}
+                  <option value="{{ opt }}" {{ 'selected' if (status or 'Aktif') == opt }}>{{ opt }}</option>
+                {% endfor %}
+              </select>
+              <i class="ti ti-chevron-down"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">
+            <i class="ti ti-{{ 'device-floppy' if edit_id else 'database-import' }}"></i>
+            {{ 'Simpan perubahan' if edit_id else 'Commit & simpan data' }}
+          </button>
+          <a href="{{ url_for('index') }}" class="btn btn-ghost">Batal</a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
