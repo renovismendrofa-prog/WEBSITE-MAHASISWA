@@ -6,7 +6,8 @@ app.secret_key = "ganti_dengan_secret_key_random"
 
 DB = "database.db"
 
-USERS = {"admin": "admin123"}
+# ── Admin credentials (hardcoded) ───────────────────────────────────────
+ADMIN_USERS = {"admin": "admin123"}
 
 # ── DB helpers ─────────────────────────────────────────────────────────
 def get_db():
@@ -127,13 +128,25 @@ def binary_search(data, nim):
         else:                        hi = mid - 1
     return []
 
-# ── Auth ───────────────────────────────────────────────────────────────
+# ── Auth decorators ──────────────────────────────────────────────────────
 def login_required(f):
+    """Boleh diakses oleh admin ATAU mahasiswa."""
     from functools import wraps
     @wraps(f)
     def wrapper(*args, **kwargs):
         if "user" not in session:
             return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return wrapper
+
+def admin_required(f):
+    """Hanya boleh diakses oleh admin."""
+    from functools import wraps
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if session.get("role") != "admin":
+            flash("Akses ditolak. Halaman ini khusus admin.", "error")
+            return redirect(url_for("index"))
         return f(*args, **kwargs)
     return wrapper
 
@@ -145,15 +158,29 @@ def validate_email(email):
         return True   # email opsional
     return bool(EMAIL_RE.match(email))
 
-# ── Routes ─────────────────────────────────────────────────────────────
+# ── Routes: Auth ─────────────────────────────────────────────────────────
 @app.route("/login", methods=["GET","POST"])
 def login():
     if request.method == "POST":
         u = request.form.get("username","").strip()
         p = request.form.get("password","").strip()
-        if USERS.get(u) == p:
+
+        # 1. Cek dulu apakah login sebagai admin
+        if ADMIN_USERS.get(u) == p:
             session["user"] = u
+            session["role"] = "admin"
             return redirect(url_for("index"))
+
+        # 2. Cek login sebagai mahasiswa: username = NIM, password = 6 digit terakhir NIM
+        if re.fullmatch(r"\d{12}", u) and len(p) == 6 and u.endswith(p):
+            with get_db() as conn:
+                row = conn.execute("SELECT * FROM mahasiswa WHERE nim=?", (u,)).fetchone()
+            if row:
+                session["user"]    = u
+                session["role"]    = "mahasiswa"
+                session["mhs_id"]  = row["id"]
+                return redirect(url_for("profil"))
+
         flash("Username atau password salah.")
     return render_template("login.html")
 
@@ -162,9 +189,14 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
+# ── Routes: Admin dashboard ───────────────────────────────────────────────
 @app.route("/", methods=["GET"])
 @login_required
 def index():
+    # Mahasiswa diarahkan ke halaman profil, bukan dashboard admin
+    if session.get("role") == "mahasiswa":
+        return redirect(url_for("profil"))
+
     sort_key    = request.args.get("sort", "bubble_nim_asc")
     search_q    = request.args.get("q", "").strip()
     search_mode = request.args.get("mode", "linear")
@@ -207,7 +239,7 @@ def index():
     )
 
 @app.route("/tambah", methods=["GET","POST"])
-@login_required
+@admin_required
 def tambah():
     if request.method == "POST":
         nim     = request.form.get("nim","").strip()
@@ -251,7 +283,7 @@ def tambah():
     return render_template("tambah.html", errors=[])
 
 @app.route("/edit/<int:id>", methods=["GET","POST"])
-@login_required
+@admin_required
 def edit(id):
     with get_db() as conn:
         row = conn.execute("SELECT * FROM mahasiswa WHERE id=?", (id,)).fetchone()
@@ -295,7 +327,7 @@ def edit(id):
         ipk=row["ipk"], jurusan=row["jurusan"], status=row["status"], edit_id=id)
 
 @app.route("/hapus/<int:id>")
-@login_required
+@admin_required
 def hapus(id):
     with get_db() as conn:
         conn.execute("DELETE FROM mahasiswa WHERE id=?", (id,))
@@ -303,7 +335,7 @@ def hapus(id):
     return redirect(url_for("index"))
 
 @app.route("/export")
-@login_required
+@admin_required
 def export():
     with get_db() as conn:
         rows = conn.execute("SELECT nim,nama,email,ipk,jurusan,status FROM mahasiswa").fetchall()
@@ -317,7 +349,7 @@ def export():
         headers={"Content-Disposition":"attachment;filename=data_mahasiswa.csv"})
 
 @app.route("/import", methods=["POST"])
-@login_required
+@admin_required
 def bulk_import():
     f = request.files.get("file")
     if not f:
@@ -366,6 +398,69 @@ def bulk_import():
         flash(f"Gagal memproses file: {e}", "error")
 
     return redirect(url_for("index"))
+
+# ── Routes: Mahasiswa portal ───────────────────────────────────────────────
+@app.route("/profil", methods=["GET"])
+@login_required
+def profil():
+    if session.get("role") != "mahasiswa":
+        return redirect(url_for("index"))
+
+    with get_db() as conn:
+        me = conn.execute("SELECT * FROM mahasiswa WHERE id=?", (session["mhs_id"],)).fetchone()
+        all_rows = [dict(r) for r in conn.execute("SELECT * FROM mahasiswa").fetchall()]
+
+    if not me:
+        session.clear()
+        flash("Data mahasiswa tidak ditemukan. Silakan login kembali.")
+        return redirect(url_for("login"))
+
+    sort_key = request.args.get("sort", "bubble_nim_asc")
+    fn = SORT_FN.get(sort_key, SORT_FN["bubble_nim_asc"])
+    all_rows = fn(all_rows)
+
+    total   = len(all_rows)
+    avg_ipk = round(sum(r["ipk"] for r in all_rows) / total, 2) if total else 0
+
+    return render_template("profil.html", me=dict(me), rows=all_rows,
+        sort_key=sort_key, total=total, avg_ipk=avg_ipk)
+
+@app.route("/profil/edit", methods=["GET","POST"])
+@login_required
+def profil_edit():
+    if session.get("role") != "mahasiswa":
+        return redirect(url_for("index"))
+
+    with get_db() as conn:
+        me = conn.execute("SELECT * FROM mahasiswa WHERE id=?", (session["mhs_id"],)).fetchone()
+    if not me:
+        session.clear()
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        email   = request.form.get("email","").strip().lower()
+        jurusan = request.form.get("jurusan","").strip()
+
+        errors = []
+        if email and not validate_email(email):
+            errors.append("Format email tidak valid.")
+        if not jurusan:
+            errors.append("Jurusan tidak boleh kosong.")
+
+        if errors:
+            return render_template("profil_edit.html", errors=errors,
+                me=dict(me), email=email, jurusan=jurusan)
+
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE mahasiswa SET email=?, jurusan=? WHERE id=?",
+                (email, jurusan, session["mhs_id"])
+            )
+        flash("Profil berhasil diperbarui.", "success")
+        return redirect(url_for("profil"))
+
+    return render_template("profil_edit.html", errors=[],
+        me=dict(me), email=me["email"] or "", jurusan=me["jurusan"])
 
 if __name__ == "__main__":
     init_db()

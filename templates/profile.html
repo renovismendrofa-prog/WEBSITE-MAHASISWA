@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Profil Saya — Dashboard Academic{% endblock %}
+
+{% block extra_style %}
+.main-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+/* ── Profile card ── */
+.profile-card { text-align: center; }
+.avatar {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: var(--blue); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; font-weight: 600;
+  margin: 0 auto 14px;
+}
+.profile-name { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+.profile-jurusan { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+
+.profile-detail {
+  text-align: left; margin-top: 16px;
+  border-top: 1px solid var(--border); padding-top: 16px;
+}
+.detail-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0; font-size: 13px;
+}
+.detail-row + .detail-row { border-top: 1px solid var(--border); }
+.detail-label { color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.detail-label i { font-size: 14px; color: var(--hint); }
+.detail-val { font-weight: 500; text-align: right; }
+.detail-val.mono { font-family: "SF Mono","Fira Code",monospace; font-size: 12px; }
+
+.ipk-pill {
+  display: inline-block; padding: 2px 9px;
+  border-radius: 20px; font-size: 12px; font-weight: 600;
+}
+.ipk-hi { background: #f0fdf4; color: #3B6D11; border: 1px solid #bbf7d0; }
+.ipk-md { background: #fffbeb; color: #854F0B; border: 1px solid #fde68a; }
+.ipk-lo { background: #fef2f2; color: #A32D2D; border: 1px solid #fecaca; }
+
+.status-dot {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 500;
+}
+.status-dot::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+.s-aktif::before  { background: #3B6D11; }
+.s-cuti::before   { background: #BA7517; }
+.s-keluar::before { background: #A32D2D; }
+
+.btn-edit-profile {
+  width: 100%; margin-top: 16px; justify-content: center;
+}
+
+/* ── Stats mini ── */
+.stats-mini {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px; margin-bottom: 16px;
+}
+.stat-mini {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 14px;
+}
+.stat-mini-label {
+  font-size: 10px; font-weight: 600; color: var(--hint);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px;
+}
+.stat-mini-val { font-size: 20px; font-weight: 600; }
+
+/* ── Table panel ── */
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.panel-title { font-size: 14px; font-weight: 600; }
+
+.sec-label {
+  font-size: 10px; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--hint); margin-bottom: 8px;
+}
+.sort-group { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.sort-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 5px 11px;
+  font-size: 12px; color: var(--muted); cursor: pointer;
+  transition: all .15s; text-decoration: none; white-space: nowrap;
+}
+.sort-btn i { font-size: 13px; }
+.sort-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
+.sort-btn.active {
+  background: var(--blue-bg); border-color: var(--blue-bd);
+  color: var(--blue-text); font-weight: 500;
+}
+
+.tbl-wrap {
+  overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead tr { background: var(--surface2); }
+th {
+  padding: 9px 14px; text-align: left; font-size: 10px; font-weight: 600;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--hint);
+  border-bottom: 1px solid var(--border);
+}
+td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface2); }
+tr.me-row td { background: var(--blue-bg); }
+.nim { font-family: "SF Mono","Fira Code",monospace; font-size: 12px; color: var(--muted); }
+.name { font-weight: 500; }
+.me-tag {
+  display: inline-block; background: var(--blue); color: #fff;
+  font-size: 10px; font-weight: 600; padding: 1px 7px;
+  border-radius: 20px; margin-left: 6px; vertical-align: middle;
+}
+{% endblock %}
+
+{% block content %}
+<div class="page">
+  <div class="main-grid">
+
+    <!-- Left: profile card -->
+    <div class="card profile-card">
+      <div class="avatar">{{ me.nama[0] | upper }}</div>
+      <div class="profile-name">{{ me.nama }}</div>
+      <div class="profile-jurusan">{{ me.jurusan }}</div>
+      <span class="status-dot s-{{ me.status | lower }}">{{ me.status }}</span>
+
+      <div class="profile-detail">
+        <div class="detail-row">
+          <span class="detail-label"><i class="ti ti-id-badge"></i>NIM</span>
+          <span class="detail-val mono">{{ me.nim }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label"><i class="ti ti-mail"></i>Email</span>
+          <span class="detail-val">
+            {% if me.email %}{{ me.email }}{% else %}<span style="color:var(--hint)">—</span>{% endif %}
+          </span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label"><i class="ti ti-chart-bar"></i>IPK</span>
+          <span class="detail-val">
+            {% if me.ipk >= 3.0 %}<span class="ipk-pill ipk-hi">{{ me.ipk }}</span>
+            {% elif me.ipk >= 2.5 %}<span class="ipk-pill ipk-md">{{ me.ipk }}</span>
+            {% else %}<span class="ipk-pill ipk-lo">{{ me.ipk }}</span>{% endif %}
+          </span>
+        </div>
+      </div>
+
+      <a href="{{ url_for('profil_edit') }}" class="btn btn-primary btn-edit-profile">
+        <i class="ti ti-edit"></i> Edit profil saya
+      </a>
+    </div>
+
+    <!-- Right: stats + table -->
+    <div>
+      <div class="stats-mini">
+        <div class="stat-mini">
+          <div class="stat-mini-label">Total mahasiswa</div>
+          <div class="stat-mini-val">{{ total }}</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-label">Rata-rata IPK</div>
+          <div class="stat-mini-val">{{ avg_ipk }}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="panel-header">
+          <span class="panel-title">Data seluruh mahasiswa</span>
+        </div>
+
+        <div class="sec-label">Urutkan berdasarkan</div>
+        <div class="sort-group">
+          {% set sorts = [
+            ("bubble_nim_asc",  "ti-sort-ascending",  "NIM ↑"),
+            ("bubble_nim_desc", "ti-sort-descending", "NIM ↓"),
+            ("shell_ipk_asc",   "ti-sort-ascending",  "IPK ↑"),
+            ("shell_ipk_desc",  "ti-sort-descending", "IPK ↓"),
+          ] %}
+          {% for key, icon, label in sorts %}
+            <a href="{{ url_for('profil', sort=key) }}"
+               class="sort-btn {{ 'active' if sort_key == key else '' }}">
+              <i class="ti {{ icon }}"></i>{{ label }}
+            </a>
+          {% endfor %}
+        </div>
+
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>NIM</th>
+                <th>Nama lengkap</th>
+                <th>Jurusan</th>
+                <th>IPK</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+              <tr class="{{ 'me-row' if r.nim == me.nim else '' }}">
+                <td class="nim">{{ r.nim }}</td>
+                <td class="name">
+                  {{ r.nama }}
+                  {% if r.nim == me.nim %}<span class="me-tag">Saya</span>{% endif %}
+                </td>
+                <td>{{ r.jurusan }}</td>
+                <td>
+                  {% if r.ipk >= 3.0 %}<span class="ipk-pill ipk-hi">{{ r.ipk }}</span>
+                  {% elif r.ipk >= 2.5 %}<span class="ipk-pill ipk-md">{{ r.ipk }}</span>
+                  {% else %}<span class="ipk-pill ipk-lo">{{ r.ipk }}</span>{% endif %}
+                </td>
+                <td><span class="status-dot s-{{ r.status | lower }}">{{ r.status }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -53,10 +53,9 @@
     }
     .input-wrap { position: relative; }
     .input-wrap > i {
-     position: absolute; left: 11px; top: 50%;
-     transform: translateY(-50%);
-     font-size: 16px; color: var(--hint); pointer-events: none;
-
+      position: absolute; left: 11px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 16px; color: var(--hint); pointer-events: none;
     }
     .form-input {
       width: 100%;
@@ -121,7 +120,7 @@
   <div class="brand">
     <div class="brand-icon"><i class="ti ti-school"></i></div>
     <h1>Dashboard Academic Terpadu</h1>
-    <p>Masuk untuk mengelola data mahasiswa</p>
+    <p>Masuk untuk mengakses data akademik</p>
   </div>
 
   <div class="card">
@@ -141,7 +140,7 @@
         <div class="input-wrap">
           <i class="ti ti-user"></i>
           <input class="form-input" type="text" id="username" name="username"
-                 placeholder="Masukkan username" autocomplete="username" required>
+                 placeholder="Admin atau NIM (12 digit)" autocomplete="username" required>
         </div>
       </div>
 
@@ -161,11 +160,6 @@
         <i class="ti ti-login"></i> Masuk
       </button>
     </form>
-
-    <div class="hint-box">
-      <i class="ti ti-info-circle"></i>
-      <span>Default: <code>admin</code> / <code>admin123</code></span>
-    </div>
   </div>
 </div>
 

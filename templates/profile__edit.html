@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Profil — Dashboard Academic{% endblock %}
+
+{% block extra_style %}
+.form-wrap { max-width: 520px; margin: 0 auto; }
+.form-header { margin-bottom: 24px; }
+.form-header h1 { font-size: 18px; font-weight: 600; }
+.form-header p  { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+.form-group { margin-bottom: 18px; }
+.form-label {
+  display: block; font-size: 11px; font-weight: 600;
+  color: var(--muted); margin-bottom: 6px;
+  letter-spacing: .05em; text-transform: uppercase;
+}
+.form-label span { color: #A32D2D; margin-left: 2px; }
+.form-label .optional { color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+.input-wrap { position: relative; }
+.input-wrap > i {
+  position: absolute; left: 11px; top: 50%;
+  transform: translateY(-50%); font-size: 16px;
+  color: var(--hint); pointer-events: none;
+}
+.form-input {
+  width: 100%; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 9px 12px 9px 36px; font-size: 14px;
+  color: var(--text); font-family: inherit; outline: none;
+  transition: border-color .15s;
+}
+.form-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(24,95,165,.08); }
+.form-input:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+
+.nim-badge {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 9px 12px 9px 36px;
+  font-family: "SF Mono","Fira Code",monospace;
+  font-size: 14px; color: var(--muted); display: block;
+}
+
+.form-hint { font-size: 11px; color: var(--hint); margin-top: 5px; }
+
+.error-box {
+  background: var(--red-bg); border: 1px solid var(--red-bd);
+  border-radius: var(--radius); padding: 12px 14px;
+  font-size: 13px; color: var(--red); margin-bottom: 20px;
+}
+.error-box ul { padding-left: 18px; margin-top: 6px; }
+.error-box li { margin-top: 4px; }
+.error-box-title { display: flex; align-items: center; gap: 7px; font-weight: 600; margin-bottom: 2px; }
+
+.form-actions { display: flex; gap: 10px; margin-top: 24px; }
+.form-actions .btn { flex: 1; justify-content: center; }
+
+.lock-note {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 14px;
+  font-size: 12px; color: var(--muted); margin-top: -2px; margin-bottom: 18px;
+}
+.lock-note i { color: var(--hint); font-size: 14px; flex-shrink: 0; }
+{% endblock %}
+
+{% block content %}
+<div class="page">
+  <div class="form-wrap">
+
+    <a href="{{ url_for('profil') }}" class="btn btn-ghost btn-sm" style="margin-bottom:20px">
+      <i class="ti ti-arrow-left"></i> Kembali ke profil
+    </a>
+
+    <div class="card">
+      <div class="form-header">
+        <h1><i class="ti ti-user-edit" style="color:var(--blue);vertical-align:-2px;margin-right:6px"></i>Edit Profil Saya</h1>
+        <p>Kamu hanya dapat memperbarui email dan jurusan.</p>
+      </div>
+
+      {% if errors %}
+        <div class="error-box">
+          <div class="error-box-title"><i class="ti ti-alert-triangle"></i>{{ errors | length }} kesalahan ditemukan</div>
+          <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        </div>
+      {% endif %}
+
+      <form method="POST" action="{{ url_for('profil_edit') }}">
+
+        <!-- NIM (locked) -->
+        <div class="form-group">
+          <label class="form-label">Nomor Induk Mahasiswa (NIM)</label>
+          <div class="input-wrap">
+            <i class="ti ti-id-badge"></i>
+            <span class="nim-badge">{{ me.nim }}</span>
+          </div>
+        </div>
+
+        <!-- Nama (locked) -->
+        <div class="form-group">
+          <label class="form-label">Nama lengkap</label>
+          <div class="input-wrap">
+            <i class="ti ti-user"></i>
+            <span class="nim-badge">{{ me.nama }}</span>
+          </div>
+        </div>
+
+        <div class="lock-note">
+          <i class="ti ti-lock"></i>
+          NIM dan nama hanya dapat diubah oleh admin.
+        </div>
+
+        <!-- Email -->
+        <div class="form-group">
+          <label class="form-label" for="email">Email <span class="optional">(opsional)</span></label>
+          <div class="input-wrap">
+            <i class="ti ti-mail"></i>
+            <input class="form-input" type="email" id="email" name="email"
+                   value="{{ email or '' }}" placeholder="contoh@gmail.com" autocomplete="email">
+          </div>
+          <p class="form-hint">Format: nama@domain.com — boleh dikosongkan.</p>
+        </div>
+
+        <!-- Jurusan -->
+        <div class="form-group">
+          <label class="form-label" for="jurusan">Jurusan / Program studi <span>*</span></label>
+          <div class="input-wrap">
+            <i class="ti ti-building-community"></i>
+            <input class="form-input" type="text" id="jurusan" name="jurusan"
+                   value="{{ jurusan or '' }}" placeholder="Contoh: Informatika, Sistem Informasi…" required>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">
+            <i class="ti ti-device-floppy"></i> Simpan perubahan
+          </button>
+          <a href="{{ url_for('profil') }}" class="btn btn-ghost">Batal</a>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
