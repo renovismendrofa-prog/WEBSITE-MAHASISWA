@@ -386,11 +386,11 @@ tbody tr:hover td { background: var(--surface2); }
     <!-- Right: import panel -->
     <div class="card import-panel">
       <div class="import-title">Bulk import dataset</div>
-      <div class="import-desc">Upload file <strong>CSV</strong> atau <strong>JSON</strong> untuk menambah banyak data sekaligus.</div>
+      <div class="import-desc">Upload file <strong>CSV</strong>, <strong>JSON</strong>, <strong>Excel (.xlsx)</strong>, atau <strong>TXT</strong> untuk menambah banyak data sekaligus.</div>
 
       <form method="POST" action="{{ url_for('bulk_import') }}" enctype="multipart/form-data">
         <div class="upload-zone" id="drop-zone">
-          <input type="file" name="file" id="file-input" accept=".csv,.json">
+          <input type="file" name="file" id="file-input" accept=".csv,.json,.xlsx,.txt">
           <i class="ti ti-cloud-upload" id="upload-icon"></i>
           <span id="file-label">Drag & drop file di sini</span>
           <small id="file-hint">atau klik untuk pilih file</small>

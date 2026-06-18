@@ -1,6 +1,12 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response
 import sqlite3, csv, json, io, os, time, re
 
+try:
+    from openpyxl import load_workbook
+    XLSX_AVAILABLE = True
+except ImportError:
+    XLSX_AVAILABLE = False
+
 app = Flask(__name__)
 app.secret_key = "ganti_dengan_secret_key_random"
 
@@ -360,25 +366,49 @@ def bulk_import():
     inserted = skipped = 0
 
     try:
-        if fname.endswith(".csv"):
+        if fname.endswith(".csv") or fname.endswith(".txt"):
             content = f.read().decode("utf-8")
-            rows    = list(csv.DictReader(io.StringIO(content)))
+            # deteksi delimiter otomatis (koma, titik koma, atau tab)
+            sample = content[:1024]
+            if sample.count(";") > sample.count(","):
+                delim = ";"
+            elif sample.count("\t") > sample.count(","):
+                delim = "\t"
+            else:
+                delim = ","
+            rows = list(csv.DictReader(io.StringIO(content), delimiter=delim))
+
         elif fname.endswith(".json"):
             rows = json.loads(f.read().decode("utf-8"))
+
+        elif fname.endswith(".xlsx"):
+            if not XLSX_AVAILABLE:
+                flash("Server belum mendukung file Excel. Install openpyxl terlebih dahulu.", "error")
+                return redirect(url_for("index"))
+            wb = load_workbook(filename=io.BytesIO(f.read()), read_only=True, data_only=True)
+            ws = wb.active
+            data_iter = ws.iter_rows(values_only=True)
+            headers = [str(h).strip().lower() if h else "" for h in next(data_iter)]
+            rows = []
+            for raw_row in data_iter:
+                if all(c is None for c in raw_row):
+                    continue
+                rows.append({headers[i]: raw_row[i] for i in range(len(headers)) if i < len(raw_row)})
+
         else:
-            flash("Format file harus .csv atau .json", "error")
+            flash("Format file harus .csv, .json, .xlsx, atau .txt", "error")
             return redirect(url_for("index"))
 
         with get_db() as conn:
             for r in rows:
-                nim     = str(r.get("nim","")).strip()
-                nama    = str(r.get("nama","")).strip()
-                email   = str(r.get("email","")).strip().lower()
-                jurusan = str(r.get("jurusan","")).strip()
-                status  = str(r.get("status","Aktif")).strip()
+                nim     = str(r.get("nim","") or "").strip()
+                nama    = str(r.get("nama","") or "").strip()
+                email   = str(r.get("email","") or "").strip().lower()
+                jurusan = str(r.get("jurusan","") or "").strip()
+                status  = str(r.get("status","Aktif") or "Aktif").strip()
                 try:
-                    ipk = float(r.get("ipk", 0))
-                except ValueError:
+                    ipk = float(r.get("ipk", 0) or 0)
+                except (ValueError, TypeError):
                     skipped += 1; continue
                 if not re.fullmatch(r"\d{12}", nim):
                     skipped += 1; continue
