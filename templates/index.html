@@ -159,6 +159,7 @@ tbody tr:hover td { background: var(--surface2); }
 .act-btn i { font-size: 12px; }
 .act-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
 .act-btn.del:hover { border-color: #fecaca; color: var(--red); background: #fef2f2; }
+.act-btn.disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
 
 /* ── Empty state ── */
 .empty-state {
@@ -264,6 +265,12 @@ tbody tr:hover td { background: var(--surface2); }
       <div class="panel-header">
         <span class="panel-title">Data mahasiswa</span>
         <div style="display:flex;gap:8px">
+          <form method="POST" action="{{ url_for('kirim_laporan') }}" style="margin:0">
+            <button type="submit" class="btn btn-ghost btn-sm"
+                    onclick="return confirm('Kirim laporan semua data mahasiswa ke email admin?')">
+              <i class="ti ti-mail-forward"></i> Kirim Laporan
+            </button>
+          </form>
           <a href="{{ url_for('export') }}" class="btn btn-ghost btn-sm">
             <i class="ti ti-download"></i> Export CSV
           </a>
@@ -352,6 +359,10 @@ tbody tr:hover td { background: var(--surface2); }
               <td><span class="status-dot s-{{ r.status | lower }}">{{ r.status }}</span></td>
               <td>
                 <div class="act-row">
+                  <a href="{{ url_for('kirim_email', id=r.id) }}" class="act-btn {{ 'disabled' if not r.email else '' }}"
+                     {{ 'onclick="return false;" title="Mahasiswa belum punya email"' if not r.email else '' }}>
+                    <i class="ti ti-mail"></i> Email
+                  </a>
                   <a href="{{ url_for('edit', id=r.id) }}" class="act-btn">
                     <i class="ti ti-edit"></i> Edit
                   </a>

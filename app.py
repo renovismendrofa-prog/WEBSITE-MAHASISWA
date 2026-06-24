@@ -1,5 +1,10 @@
+from dotenv import load_dotenv
+load_dotenv()
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response
 import sqlite3, csv, json, io, os, time, re
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 try:
     from openpyxl import load_workbook
@@ -12,8 +17,125 @@ app.secret_key = "ganti_dengan_secret_key_random"
 
 DB = "database.db"
 
-# ── Admin credentials (hardcoded) ───────────────────────────────────────
-ADMIN_USERS = {"admin": "admin123"}
+# ── Admin credentials ───────────────────────────────────────────────────
+# Password admin disimpan di sini, bisa diganti lewat fitur lupa password
+ADMIN_USERS = {"admin": os.environ.get("ADMIN_PASSWORD", "admin123")}
+
+# Email admin (untuk terima OTP dan laporan)
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
+
+# ── OTP store (in-memory, hilang kalau server restart) ──────────────────
+import random, hashlib
+OTP_STORE = {}   # { "admin": {"otp": "123456", "expires": timestamp} }
+
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
+def store_otp(username, otp):
+    OTP_STORE[username] = {"otp": otp, "expires": time.time() + 300}  # 5 menit
+
+def verify_otp(username, otp_input):
+    data = OTP_STORE.get(username)
+    if not data:
+        return False, "OTP tidak ditemukan. Minta OTP baru."
+    if time.time() > data["expires"]:
+        OTP_STORE.pop(username, None)
+        return False, "OTP sudah kadaluarsa (5 menit). Minta OTP baru."
+    if data["otp"] != otp_input.strip():
+        return False, "OTP salah."
+    OTP_STORE.pop(username, None)
+    return True, None
+
+# ── Email (Gmail SMTP) config ────────────────────────────────────────────
+# Isi dengan email Gmail kamu dan App Password (BUKAN password Gmail biasa).
+# Cara buat App Password: myaccount.google.com/apppasswords (wajib 2FA aktif dulu)
+GMAIL_ADDRESS      = os.environ.get("GMAIL_ADDRESS", "")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+
+def send_email(to_address, subject, body, html_body=None):
+    """Kirim email lewat Gmail SMTP. Support plain text dan HTML."""
+    if not to_address:
+        return False, "Penerima belum punya alamat email."
+    if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD:
+        return False, "Email pengirim belum dikonfigurasi. Set environment variable GMAIL_ADDRESS dan GMAIL_APP_PASSWORD."
+
+    msg = MIMEMultipart("alternative")
+    msg["From"]    = GMAIL_ADDRESS
+    msg["To"]      = to_address
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+    if html_body:
+        msg.attach(MIMEText(html_body, "html"))
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+            server.starttls()
+            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+            server.sendmail(GMAIL_ADDRESS, to_address, msg.as_string())
+        return True, None
+    except smtplib.SMTPAuthenticationError:
+        return False, "Login Gmail gagal. Periksa GMAIL_ADDRESS dan App Password."
+    except Exception as e:
+        return False, f"Gagal mengirim email: {e}"
+
+def send_laporan_email(rows):
+    """Kirim laporan semua data mahasiswa ke email admin."""
+    if not ADMIN_EMAIL:
+        return False, "Email admin belum dikonfigurasi. Set environment variable ADMIN_EMAIL."
+
+    # Build tabel HTML
+    rows_html = ""
+    for i, r in enumerate(rows, 1):
+        ipk_color = "#3B6D11" if r["ipk"] >= 3.0 else "#854F0B" if r["ipk"] >= 2.5 else "#A32D2D"
+        rows_html += f"""
+        <tr style="background:{'#f9f9f9' if i%2==0 else '#ffffff'}">
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">{i}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-family:monospace;font-size:12px">{r['nim']}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-weight:500">{r['nama']}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">{r.get('email') or '—'}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">{r['jurusan']}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:{ipk_color};font-weight:600">{r['ipk']}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">{r['status']}</td>
+        </tr>"""
+
+    avg_ipk = round(sum(r["ipk"] for r in rows) / len(rows), 2) if rows else 0
+    aktif   = sum(1 for r in rows if r["status"] == "Aktif")
+
+    html_body = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:900px;margin:0 auto">
+      <div style="background:#185FA5;padding:20px 28px;border-radius:10px 10px 0 0">
+        <h1 style="color:#fff;margin:0;font-size:20px">📊 Laporan Data Mahasiswa</h1>
+        <p style="color:#bfdbfe;margin:6px 0 0;font-size:13px">Dikirim otomatis dari Dashboard Academic Terpadu</p>
+      </div>
+      <div style="background:#f8f9fa;padding:16px 28px;border:1px solid #e5e7eb;border-top:none">
+        <div style="display:flex;gap:24px">
+          <div><span style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Total</span><br><strong style="font-size:22px">{len(rows)}</strong></div>
+          <div><span style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Rata-rata IPK</span><br><strong style="font-size:22px">{avg_ipk}</strong></div>
+          <div><span style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Aktif</span><br><strong style="font-size:22px">{aktif}</strong></div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-top:none">
+        <thead>
+          <tr style="background:#f1f5f9">
+            <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;border-bottom:2px solid #e5e7eb">#</th>
+            <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;border-bottom:2px solid #e5e7eb">NIM</th>
+            <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;border-bottom:2px solid #e5e7eb">Nama</th>
+            <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;border-bottom:2px solid #e5e7eb">Email</th>
+            <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;border-bottom:2px solid #e5e7eb">Jurusan</th>
+            <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;border-bottom:2px solid #e5e7eb">IPK</th>
+            <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;border-bottom:2px solid #e5e7eb">Status</th>
+          </tr>
+        </thead>
+        <tbody>{rows_html}</tbody>
+      </table>
+      <p style="font-size:11px;color:#9ca3af;padding:12px 0">Dikirim pada {time.strftime('%d %B %Y, %H:%M')} WIB</p>
+    </div>"""
+
+    plain = f"Laporan Data Mahasiswa\nTotal: {len(rows)} | Rata-rata IPK: {avg_ipk} | Aktif: {aktif}\n\n"
+    for r in rows:
+        plain += f"{r['nim']} | {r['nama']} | {r['jurusan']} | IPK {r['ipk']} | {r['status']}\n"
+
+    return send_email(ADMIN_EMAIL, f"Laporan Data Mahasiswa — {len(rows)} mahasiswa", plain, html_body)
 
 # ── DB helpers ─────────────────────────────────────────────────────────
 def get_db():
@@ -195,6 +317,109 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
+# ── Lupa Password ──────────────────────────────────────────────────────────
+@app.route("/lupa-password", methods=["GET","POST"])
+def lupa_password():
+    if request.method == "POST":
+        username = request.form.get("username","").strip()
+        if username not in ADMIN_USERS:
+            flash("Username admin tidak ditemukan.", "error")
+            return render_template("lupa_password.html", step="request")
+
+        otp = generate_otp()
+        store_otp(username, otp)
+
+        # Cek apakah ADMIN_EMAIL sudah dikonfigurasi
+        if "isi_email_admin" in ADMIN_EMAIL:
+            flash("Email admin belum dikonfigurasi di server (ADMIN_EMAIL).", "error")
+            return render_template("lupa_password.html", step="request")
+
+        html_otp = f"""
+        <div style="font-family:-apple-system,sans-serif;max-width:420px;margin:0 auto">
+          <div style="background:#185FA5;padding:20px 28px;border-radius:10px 10px 0 0">
+            <h2 style="color:#fff;margin:0;font-size:18px">🔐 Kode OTP Reset Password</h2>
+          </div>
+          <div style="background:#fff;padding:24px 28px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px">
+            <p style="color:#374151;margin:0 0 16px">Kamu meminta reset password untuk akun <strong>{username}</strong>.</p>
+            <div style="background:#f1f5f9;border-radius:8px;padding:20px;text-align:center;margin-bottom:16px">
+              <p style="margin:0 0 6px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em">Kode OTP kamu</p>
+              <p style="margin:0;font-size:36px;font-weight:700;letter-spacing:12px;color:#185FA5;font-family:monospace">{otp}</p>
+            </div>
+            <p style="color:#6b7280;font-size:13px;margin:0">Kode ini berlaku selama <strong>5 menit</strong>. Jangan bagikan ke siapapun.</p>
+          </div>
+        </div>"""
+
+        ok, err = send_email(ADMIN_EMAIL, "Kode OTP Reset Password Dashboard Academic", f"Kode OTP kamu: {otp} (berlaku 5 menit)", html_otp)
+        if not ok:
+            flash(f"Gagal kirim OTP: {err}", "error")
+            return render_template("lupa_password.html", step="request")
+
+        session["otp_username"] = username
+        flash(f"OTP telah dikirim ke email admin. Berlaku 5 menit.", "success")
+        return redirect(url_for("verifikasi_otp"))
+
+    return render_template("lupa_password.html", step="request")
+
+@app.route("/verifikasi-otp", methods=["GET","POST"])
+def verifikasi_otp():
+    username = session.get("otp_username")
+    if not username:
+        return redirect(url_for("lupa_password"))
+
+    if request.method == "POST":
+        otp_input = request.form.get("otp","").strip()
+        ok, err = verify_otp(username, otp_input)
+        if not ok:
+            flash(err, "error")
+            return render_template("lupa_password.html", step="otp", username=username)
+        session["otp_verified"] = True
+        return redirect(url_for("reset_password"))
+
+    return render_template("lupa_password.html", step="otp", username=username)
+
+@app.route("/reset-password", methods=["GET","POST"])
+def reset_password():
+    username = session.get("otp_username")
+    if not username or not session.get("otp_verified"):
+        return redirect(url_for("lupa_password"))
+
+    if request.method == "POST":
+        pw1 = request.form.get("password","").strip()
+        pw2 = request.form.get("confirm","").strip()
+
+        if len(pw1) < 6:
+            flash("Password minimal 6 karakter.", "error")
+            return render_template("lupa_password.html", step="reset")
+        if pw1 != pw2:
+            flash("Password dan konfirmasi tidak cocok.", "error")
+            return render_template("lupa_password.html", step="reset")
+
+        ADMIN_USERS[username] = pw1
+        session.pop("otp_username", None)
+        session.pop("otp_verified", None)
+        flash("Password berhasil direset! Silakan login.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("lupa_password.html", step="reset")
+
+# ── Kirim Laporan ──────────────────────────────────────────────────────────
+@app.route("/kirim-laporan", methods=["POST"])
+@admin_required
+def kirim_laporan():
+    with get_db() as conn:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM mahasiswa ORDER BY nim").fetchall()]
+
+    if not rows:
+        flash("Tidak ada data mahasiswa untuk dikirim.", "error")
+        return redirect(url_for("index"))
+
+    ok, err = send_laporan_email(rows)
+    if ok:
+        flash(f"Laporan {len(rows)} data mahasiswa berhasil dikirim ke {ADMIN_EMAIL}.", "success")
+    else:
+        flash(f"Gagal kirim laporan: {err}", "error")
+    return redirect(url_for("index"))
+
 # ── Routes: Admin dashboard ───────────────────────────────────────────────
 @app.route("/", methods=["GET"])
 @login_required
@@ -339,6 +564,46 @@ def hapus(id):
         conn.execute("DELETE FROM mahasiswa WHERE id=?", (id,))
     flash("Data berhasil dihapus.", "success")
     return redirect(url_for("index"))
+
+@app.route("/kirim-email/<int:id>", methods=["GET","POST"])
+@admin_required
+def kirim_email(id):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM mahasiswa WHERE id=?", (id,)).fetchone()
+    if not row:
+        flash("Data mahasiswa tidak ditemukan.", "error")
+        return redirect(url_for("index"))
+
+    mhs = dict(row)
+
+    if request.method == "POST":
+        subject = request.form.get("subject","").strip()
+        body    = request.form.get("body","").strip()
+
+        if not mhs.get("email"):
+            flash(f"{mhs['nama']} belum memiliki alamat email.", "error")
+            return redirect(url_for("index"))
+        if not subject or not body:
+            return render_template("kirim_email.html", mhs=mhs,
+                errors=["Subjek dan isi pesan tidak boleh kosong."],
+                subject=subject, body=body)
+
+        ok, err = send_email(mhs["email"], subject, body)
+        if ok:
+            flash(f"Email berhasil dikirim ke {mhs['nama']} ({mhs['email']}).", "success")
+            return redirect(url_for("index"))
+        else:
+            return render_template("kirim_email.html", mhs=mhs,
+                errors=[err], subject=subject, body=body)
+
+    default_subject = "Informasi Akademik"
+    default_body = (
+        f"Halo {mhs['nama']},\n\n"
+        f"Pesan ini dikirim melalui Dashboard Academic Terpadu.\n\n"
+        f"Salam,\nAdmin Akademik"
+    )
+    return render_template("kirim_email.html", mhs=mhs, errors=[],
+        subject=default_subject, body=default_body)
 
 @app.route("/export")
 @admin_required
