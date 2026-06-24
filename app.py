@@ -1,5 +1,3 @@
-from dotenv import load_dotenv
-load_dotenv()
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response
 import sqlite3, csv, json, io, os, time, re
 import smtplib
